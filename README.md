@@ -147,27 +147,19 @@ This writes:
 
 ## Key Findings
 
-- FP16 had the highest throughput in this HuggingFace Transformers setup.
-- INT8 and INT4 significantly reduced allocated GPU memory.
-- Quantization did not improve throughput here; generation was slower with bitsandbytes INT8 and INT4.
-- Batch size increased throughput for every precision mode.
-- Batch size 32 had the highest throughput for every precision, with higher latency.
-- INT4 used the least allocated GPU memory.
+- FP16 was the best speed configuration in this backend, delivering the highest throughput at every batch size.
+- INT8 and INT4 traded speed for memory: both reduced allocated GPU memory substantially, but neither improved throughput.
+- INT4 was the strongest memory-saving mode, reaching the lowest allocated memory across all batch sizes.
+- Batching improved throughput for every precision, showing that batch size remains a powerful utilization lever even when quantization slows generation.
+- Batch size 32 produced the highest throughput for all precisions, while also increasing latency; p95 remained close to mean, indicating slower but stable batch execution.
 
-## Limitations
+In this HuggingFace + bitsandbytes setup, quantization is a memory optimization, not a throughput optimization. FP16 dominates on speed; INT4 dominates on memory efficiency.
+
+## Limitations and Next Steps
 
 - This is a HuggingFace Transformers and bitsandbytes benchmark, not a universal quantization result.
-- Quantization can reduce memory without guaranteeing throughput gains; backend implementation matters.
+- Backend implementation matters; results may differ with vLLM, other kernels, other GPUs, longer outputs, or different model sizes.
 - Colab GPU hardware can vary across sessions.
 - The benchmark uses a fixed 30-prompt set and `max_new_tokens=32`.
 - The benchmark reports full generation latency, not time to first token.
-- It does not model multi-user traffic, request queueing, streaming, or production service-level objectives.
-
-## Future Work
-
-- Measure time to first token (TTFT).
-- Add vLLM backend comparisons.
-- Add concurrent request and sustained-load benchmarks.
-- Separate prefill and decode timing.
-- Test longer output lengths and larger prompt sets.
-- Compare additional GPU types.
+- Future work should measure TTFT, compare vLLM, add concurrent request and sustained-load tests, split prefill/decode timing, and evaluate longer outputs.

@@ -104,25 +104,27 @@ Generated aggregate artifacts:
 
 ## Analysis
 
-Batch scaling improves throughput across all precision modes. FP16 rises from 27.3510 tok/s at batch size 1 to 434.4513 tok/s at batch size 32. INT8 rises from 7.6495 tok/s to 150.2164 tok/s, and INT4 rises from 15.7128 tok/s to 138.2671 tok/s. Larger batches give the GPU more work per generation call, which improves aggregate throughput even when the precision mode itself is slower.
+Batch scaling improves throughput across all precision modes. The exact gains differ by precision, but the overall shape is consistent: larger batches give the GPU more work per generation call, so aggregate tokens per second rises from batch size 1 to batch size 32. This holds even for INT8 and INT4, where the quantized execution path is slower overall.
 
 FP16 is the fastest precision in this experiment. It has the highest throughput at every batch size and the lowest latency at batch sizes 8 and 32. Under this HuggingFace Transformers and bitsandbytes setup, INT8 and INT4 reduce allocated memory but slow generation.
 
 The batch-size tradeoff is still visible within each precision. Batch size 32 gives the highest throughput, but latency increases compared with smaller batches. For batch size 32, p95 latency remains close to mean latency in all three precision modes, indicating stable but slower batch execution rather than highly variable tail behavior.
 
+INT4 is faster than INT8 at batch size 1, but INT8 and INT4 are similar at batch sizes 8 and 32. This suggests bitsandbytes overhead and kernel behavior vary by batch size.
+
 The memory results show the expected advantage of quantization. At batch size 32, FP16 allocates 6.2963 GB, INT8 allocates 3.7589 GB, and INT4 allocates 2.6105 GB. INT4 uses the least memory overall.
 
 Backend implementation matters. Quantization changes the memory footprint and arithmetic path, but speed depends on kernel support, dequantization overhead, model architecture, batch size, and the serving stack. These results should not be read as a claim that quantization universally reduces throughput, or that FP16 is always faster in every backend. They show what happened in this specific HuggingFace Transformers plus bitsandbytes baseline.
 
-## Unexpected Finding
-
-### Quantization Reduced Memory but Did Not Improve Throughput
+## Key Finding: Quantization Is a Memory Optimization, Not a Throughput Optimization
 
 The clearest unexpected result is that INT8 and INT4 reduced memory substantially but did not improve throughput. At batch size 32, allocated memory dropped from about 6.30 GB with FP16 to about 3.76 GB with INT8 and about 2.61 GB with INT4.
 
 Throughput moved in the opposite direction. FP16 reached about 434 tok/s at batch size 32, while INT8 reached about 150 tok/s and INT4 reached about 138 tok/s.
 
 This suggests that bitsandbytes quantization in this setup is primarily a memory optimization, not a serving-throughput optimization. Quantization may still be valuable when memory is the limiting constraint, but it should be benchmarked rather than assumed to improve speed.
+
+When memory is the bottleneck, INT4 is a clear win. When throughput is the bottleneck and memory is sufficient, FP16 is the better choice in this backend.
 
 ## Limitations
 
