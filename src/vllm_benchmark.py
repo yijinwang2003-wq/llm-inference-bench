@@ -41,7 +41,7 @@ def load_vllm_model(model_name: str):
 
     from vllm import LLM
 
-    return LLM(model=model_name, dtype="float16")
+    return LLM(model=model_name, dtype="float16", max_model_len=4096)
 
 
 def _prompt_token_count(llm, prompt: str) -> int:
