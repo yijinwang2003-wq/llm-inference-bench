@@ -8,5 +8,6 @@ venv/
 .venv/
 venv-x86_64-backup/
 
-outputs/*.csv
+outputs/*_batch*.csv
+outputs/dry_run_*.csv
 !outputs/.gitkeep

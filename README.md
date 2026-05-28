@@ -15,7 +15,7 @@ This project keeps the experiment controlled: fixed prompts, deterministic gener
 | Setting | Value |
 | --- | --- |
 | Model | `meta-llama/Llama-3.2-3B-Instruct` |
-| Backend | HuggingFace Transformers |
+| Backends | HuggingFace Transformers, vLLM |
 | Quantization | bitsandbytes for INT8 and INT4 |
 | Hardware | CUDA GPU on Google Colab |
 | Precisions | FP16, INT8, INT4 |
@@ -41,7 +41,11 @@ llm-inference-bench/
 |   |-- precision_aggregated_metrics.csv
 |   |-- precision_throughput_vs_batch.png
 |   |-- precision_latency_vs_batch.png
-|   `-- precision_memory_vs_batch.png
+|   |-- precision_memory_vs_batch.png
+|   |-- backend_aggregated_metrics.csv
+|   |-- backend_throughput_vs_batch.png
+|   |-- backend_latency_vs_batch.png
+|   `-- backend_memory_vs_batch.png
 |-- scripts/
 |   |-- generate_prompts.py
 |   |-- run_experiment_matrix.py
@@ -136,27 +140,17 @@ This writes:
 
 ## Generate Plots
 
-After the precision matrix CSVs exist, generate aggregate metrics and plots:
+Run the same plotting command after either experiment:
 
 ```bash
 python scripts/plot_results.py
 ```
 
-This writes:
-
-- `outputs/precision_aggregated_metrics.csv`
-- `outputs/precision_throughput_vs_batch.png`
-- `outputs/precision_latency_vs_batch.png`
-- `outputs/precision_memory_vs_batch.png`
-
-When both Transformers FP16 and vLLM FP16 CSVs are present, the same plotting command also writes backend comparison outputs:
-
-- `outputs/backend_aggregated_metrics.csv`
-- `outputs/backend_throughput_vs_batch.png`
-- `outputs/backend_latency_vs_batch.png`
-- `outputs/backend_memory_vs_batch.png`
+The script automatically detects which CSVs are present. If only precision CSVs exist, it writes precision comparison plots. If vLLM CSVs are also present, it writes both precision and backend comparison plots.
 
 ## Results
+
+### Precision Matrix
 
 | Precision | Batch Size | Mean Latency | P95 Latency | Throughput | Max GPU Memory |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -176,6 +170,30 @@ When both Transformers FP16 and vLLM FP16 CSVs are present, the same plotting co
 
 ![Memory vs Batch Size by Precision](outputs/precision_memory_vs_batch.png)
 
+### Backend Comparison
+
+Backend comparison artifacts:
+
+- `outputs/backend_aggregated_metrics.csv`
+- `outputs/backend_throughput_vs_batch.png`
+- `outputs/backend_latency_vs_batch.png`
+- `outputs/backend_memory_vs_batch.png`
+
+| Backend | Batch Size | Mean Latency | P95 Latency | Throughput | Max GPU Memory |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| HuggingFace FP16 | 1 | 1.1793 s | 1.4457 s | 27.3510 tok/s | 6.0047 GB |
+| HuggingFace FP16 | 8 | 1.3215 s | 1.5181 s | 184.9648 tok/s | 6.0758 GB |
+| HuggingFace FP16 | 32 | 2.2097 s | 2.2288 s | 434.4513 tok/s | 6.2963 GB |
+| vLLM FP16 | 1 | 1.7032 s | 2.6746 s | 21.3900 tok/s | 11.8872 GB |
+| vLLM FP16 | 8 | 1.2255 s | 1.2740 s | 198.9600 tok/s | 11.9024 GB |
+| vLLM FP16 | 32 | 1.8425 s | 1.8843 s | 521.1701 tok/s | 11.9527 GB |
+
+![Throughput vs Batch Size by Backend](outputs/backend_throughput_vs_batch.png)
+
+![Latency vs Batch Size by Backend](outputs/backend_latency_vs_batch.png)
+
+![Memory vs Batch Size by Backend](outputs/backend_memory_vs_batch.png)
+
 ## Key Findings
 
 - FP16 was the best speed configuration in this backend, delivering the highest throughput at every batch size.
@@ -183,14 +201,19 @@ When both Transformers FP16 and vLLM FP16 CSVs are present, the same plotting co
 - INT4 was the strongest memory-saving mode, reaching the lowest allocated memory across all batch sizes.
 - Batching improved throughput for every precision, showing that batch size remains a powerful utilization lever even when quantization slows generation.
 - Batch size 32 produced the highest throughput for all precisions, while also increasing latency; p95 remained close to mean, indicating slower but stable batch execution.
+- vLLM FP16 outperformed HuggingFace FP16 at batch sizes 8 and 32, reaching 521.1701 tok/s at batch size 32 versus 434.4513 tok/s for HuggingFace.
+- HuggingFace FP16 was faster at batch size 1, while vLLM scaled better as batch size increased.
+- vLLM used substantially more allocated GPU memory in this run, about 11.95 GB at batch size 32 versus about 6.30 GB for HuggingFace FP16.
 
 In this HuggingFace + bitsandbytes setup, quantization is a memory optimization, not a throughput optimization. FP16 dominates on speed; INT4 dominates on memory efficiency.
+
+For backend comparison, vLLM's serving-oriented execution model improves throughput at larger batch sizes, consistent with its PagedAttention and continuous batching design goals. The tradeoff in this experiment is higher allocated GPU memory.
 
 ## Limitations and Next Steps
 
 - This is a HuggingFace Transformers and bitsandbytes benchmark, not a universal quantization result.
-- Backend implementation matters; results may differ with vLLM, other kernels, other GPUs, longer outputs, or different model sizes.
+- Backend implementation matters; results may differ with other kernels, GPUs, longer outputs, or model sizes.
 - Colab GPU hardware can vary across sessions.
 - The benchmark uses a fixed 30-prompt set and `max_new_tokens=32`.
 - The benchmark reports full generation latency, not time to first token.
-- Future work should measure TTFT, compare vLLM, add concurrent request and sustained-load tests, split prefill/decode timing, and evaluate longer outputs.
+- Future work should measure TTFT, add concurrent request and sustained-load tests, split prefill/decode timing, and evaluate longer outputs.
