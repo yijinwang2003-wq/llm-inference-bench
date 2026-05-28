@@ -1,32 +1,31 @@
-# FP16 Batch Scaling for Llama Inference
+# Precision and Batch Scaling for Llama Inference
 
 ## Motivation
 
-Batching is one of the central controls in LLM inference systems. A small batch can keep individual requests simple and responsive, but it may leave GPU compute underutilized. A larger batch can increase aggregate throughput by processing more prompts per generation call, but it can also increase per-batch latency.
+LLM inference performance depends on both batching and numeric precision. Batching can improve aggregate throughput by giving the GPU more work per generation call. Quantization can reduce memory requirements, which may enable larger models, larger batches, or cheaper hardware. These optimizations are often discussed together, but they do not guarantee the same outcome.
 
-This project builds a controlled FP16 baseline for `meta-llama/Llama-3.2-3B-Instruct` before adding quantization or optimized serving backends. The objective is to measure the first-order batch scaling behavior in a simple HuggingFace Transformers setup and use those results as a reference for future inference engineering work.
+This project evaluates FP16, INT8, and INT4 inference for `meta-llama/Llama-3.2-3B-Instruct` using HuggingFace Transformers and bitsandbytes on a Colab CUDA GPU. The goal is to establish a measured baseline for throughput, latency, and memory before adding production-serving features.
 
 ## Experimental Design
 
-The experiment evaluates batch sizes 1, 8, and 32 under the same model, prompt set, precision, backend, and generation length. Each configuration runs 5 timed passes after 1 warmup pass. Generation is deterministic, and outputs are saved as raw CSV files before aggregation.
+The experiment evaluates a 3 x 3 matrix:
 
-The batch sizes are intentionally spaced to show three regimes:
+- Precisions: FP16, INT8, INT4
+- Batch sizes: 1, 8, 32
 
-- Batch size 1: low batching, minimal aggregate work per generation call.
-- Batch size 8: moderate batching, expected to improve GPU utilization with limited latency impact.
-- Batch size 32: larger batch, expected to increase throughput further while exposing latency and memory behavior.
+Each configuration uses the same prompt set, generation length, backend, and run count. The matrix runner loads the model once per precision and evaluates batch sizes in increasing order. Each completed configuration is written to CSV immediately.
 
 ## Model and Hardware
 
 | Component | Value |
 | --- | --- |
 | Model | `meta-llama/Llama-3.2-3B-Instruct` |
-| Precision | FP16 |
 | Backend | HuggingFace Transformers |
+| Quantization | bitsandbytes for INT8 and INT4 |
 | Hardware | CUDA GPU on Google Colab |
 | Max new tokens | 32 |
 
-The model was loaded once by the experiment runner and reused across batch sizes. Colab GPU availability can vary, so these results should be interpreted as a controlled baseline from this Colab GPU setup, not as a universal measurement for all GPUs.
+The exact Colab GPU can vary between sessions, so the results should be treated as a controlled baseline for this environment rather than as universal hardware numbers.
 
 ## Prompt Set
 
@@ -38,7 +37,7 @@ The prompt set contains:
 - 10 medium prompts
 - 10 long prompts
 
-Each prompt item includes an `id`, `category`, and `prompt`. The fixed prompt set makes the experiment reproducible and keeps the comparison focused on batch size rather than input variation.
+Each prompt item includes an `id`, `category`, and `prompt`. Keeping the prompts fixed makes the comparison focus on precision and batch size rather than changing input data.
 
 ## Metrics
 
@@ -53,21 +52,21 @@ The raw CSV outputs also include prompt index, generated token count, prompt len
 
 ## Methodology
 
-The matrix runner executes the FP16 experiment as follows:
+For each precision, the benchmark:
 
-1. Load the fixed 30-prompt set.
-2. Load `meta-llama/Llama-3.2-3B-Instruct` once.
-3. Run batch sizes 1, 8, and 32 in increasing order.
-4. For each batch size, run 1 warmup pass.
-5. Run 5 timed passes over all prompts.
-6. Save each batch-size CSV immediately after completion.
-7. Aggregate metrics by batch size.
-8. Generate plots for throughput, mean latency, p95 latency, and GPU memory.
+1. Loads `meta-llama/Llama-3.2-3B-Instruct`.
+2. Runs batch sizes 1, 8, and 32.
+3. Performs 1 warmup pass before timed measurement.
+4. Runs 5 timed passes over all 30 prompts.
+5. Uses `max_new_tokens=32`.
+6. Saves each precision and batch-size CSV immediately.
+7. Aggregates metrics by precision and batch size.
+8. Generates throughput, latency, and memory plots.
 
-The full experiment command is:
+The full matrix command is:
 
 ```bash
-python scripts/run_experiment_matrix.py
+python scripts/run_quantization_matrix.py
 ```
 
 The plotting command is:
@@ -76,59 +75,70 @@ The plotting command is:
 python scripts/plot_results.py
 ```
 
-Generated artifacts:
+Generated aggregate artifacts:
 
-- `outputs/fp16_aggregated_metrics.csv`
-- `outputs/fp16_throughput_vs_batch.png`
-- `outputs/fp16_mean_latency_vs_batch.png`
-- `outputs/fp16_p95_latency_vs_batch.png`
-- `outputs/fp16_memory_vs_batch.png`
+- `outputs/precision_aggregated_metrics.csv`
+- `outputs/precision_throughput_vs_batch.png`
+- `outputs/precision_latency_vs_batch.png`
+- `outputs/precision_memory_vs_batch.png`
 
 ## Results
 
-| Batch Size | Mean Latency | P95 Latency | Throughput | Max GPU Memory Allocated |
-| ---: | ---: | ---: | ---: | ---: |
-| 1 | 1.2032 s | 1.4952 s | 26.8496 tokens/sec | 6.0047 GB |
-| 8 | 1.3151 s | 1.4304 s | 185.8075 tokens/sec | 6.0758 GB |
-| 32 | 2.2154 s | 2.2212 s | 433.3367 tokens/sec | 6.2963 GB |
+| Precision | Batch Size | Mean Latency | P95 Latency | Throughput | Max GPU Memory |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| FP16 | 1 | 1.1793 s | 1.4457 s | 27.3510 tok/s | 6.0047 GB |
+| FP16 | 8 | 1.3215 s | 1.5181 s | 184.9648 tok/s | 6.0758 GB |
+| FP16 | 32 | 2.2097 s | 2.2288 s | 434.4513 tok/s | 6.2963 GB |
+| INT8 | 1 | 4.1999 s | 4.6472 s | 7.6495 tok/s | 3.3836 GB |
+| INT8 | 8 | 5.5006 s | 5.9852 s | 44.2865 tok/s | 3.4788 GB |
+| INT8 | 32 | 6.3974 s | 6.6735 s | 150.2164 tok/s | 3.7589 GB |
+| INT4 | 1 | 2.0525 s | 2.4902 s | 15.7128 tok/s | 2.3250 GB |
+| INT4 | 8 | 5.4925 s | 5.6064 s | 44.3022 tok/s | 2.3983 GB |
+| INT4 | 32 | 6.9431 s | 6.9532 s | 138.2671 tok/s | 2.6105 GB |
 
-![Throughput vs Batch Size](outputs/fp16_throughput_vs_batch.png)
+![Throughput vs Batch Size by Precision](outputs/precision_throughput_vs_batch.png)
 
-![Mean Latency vs Batch Size](outputs/fp16_mean_latency_vs_batch.png)
+![Latency vs Batch Size by Precision](outputs/precision_latency_vs_batch.png)
 
-![P95 Latency vs Batch Size](outputs/fp16_p95_latency_vs_batch.png)
-
-![GPU Memory vs Batch Size](outputs/fp16_memory_vs_batch.png)
+![Memory vs Batch Size by Precision](outputs/precision_memory_vs_batch.png)
 
 ## Analysis
 
-Batch size 8 dramatically improves throughput compared with batch size 1. Throughput increases from 26.8496 tokens/sec to 185.8075 tokens/sec, while mean latency moves only from 1.2032 seconds to 1.3151 seconds. For this workload, moderate batching makes the GPU much more productive without materially changing the latency profile.
+Batch scaling improves throughput across all precision modes. FP16 rises from 27.3510 tok/s at batch size 1 to 434.4513 tok/s at batch size 32. INT8 rises from 7.6495 tok/s to 150.2164 tok/s, and INT4 rises from 15.7128 tok/s to 138.2671 tok/s. Larger batches give the GPU more work per generation call, which improves aggregate throughput even when the precision mode itself is slower.
 
-Batch size 32 gives the highest throughput at 433.3367 tokens/sec, but it also introduces a clear latency increase. Mean latency rises to 2.2154 seconds and p95 latency reaches 2.2212 seconds. The mean and p95 values are close together, so the larger batch has higher latency while still showing a tight latency distribution in this run.
+FP16 is the fastest precision in this experiment. It has the highest throughput at every batch size and the lowest latency at batch sizes 8 and 32. Under this HuggingFace Transformers and bitsandbytes setup, INT8 and INT4 reduce allocated memory but slow generation.
 
-The memory trend is modest. Max allocated GPU memory increases from 6.0047 GB at batch size 1 to 6.2963 GB at batch size 32. That is a small increase relative to the throughput gain, which indicates that batching improves GPU utilization without proportional memory growth for this setup.
+The batch-size tradeoff is still visible within each precision. Batch size 32 gives the highest throughput, but latency increases compared with smaller batches. For batch size 32, p95 latency remains close to mean latency in all three precision modes, indicating stable but slower batch execution rather than highly variable tail behavior.
 
-Overall, the experiment shows three useful points: batch size 1 underutilizes available compute, batch size 8 is a strong throughput improvement with nearly stable latency, and batch size 32 pushes throughput higher while increasing latency in a consistent way.
+The memory results show the expected advantage of quantization. At batch size 32, FP16 allocates 6.2963 GB, INT8 allocates 3.7589 GB, and INT4 allocates 2.6105 GB. INT4 uses the least memory overall.
 
-These results should not be overgeneralized. They are an FP16 HuggingFace Transformers baseline on a Colab GPU, not a full production serving benchmark. Production inference analysis would need request concurrency, queueing behavior, time to first token, streaming behavior, backend comparisons, and longer-running load tests.
+Backend implementation matters. Quantization changes the memory footprint and arithmetic path, but speed depends on kernel support, dequantization overhead, model architecture, batch size, and the serving stack. These results should not be read as a claim that quantization universally reduces throughput, or that FP16 is always faster in every backend. They show what happened in this specific HuggingFace Transformers plus bitsandbytes baseline.
+
+## Unexpected Finding
+
+### Quantization Reduced Memory but Did Not Improve Throughput
+
+The clearest unexpected result is that INT8 and INT4 reduced memory substantially but did not improve throughput. At batch size 32, allocated memory dropped from about 6.30 GB with FP16 to about 3.76 GB with INT8 and about 2.61 GB with INT4.
+
+Throughput moved in the opposite direction. FP16 reached about 434 tok/s at batch size 32, while INT8 reached about 150 tok/s and INT4 reached about 138 tok/s.
+
+This suggests that bitsandbytes quantization in this setup is primarily a memory optimization, not a serving-throughput optimization. Quantization may still be valuable when memory is the limiting constraint, but it should be benchmarked rather than assumed to improve speed.
 
 ## Limitations
 
-- The backend is HuggingFace Transformers only.
-- The experiment uses FP16 only; INT8 and INT4 are not included yet.
-- The prompt set is fixed at 30 prompts.
-- The generation length is fixed at `max_new_tokens=32`.
+- This is a HuggingFace Transformers and bitsandbytes baseline, not a full production serving benchmark.
+- Colab GPU hardware can vary between sessions.
+- The experiment uses 30 fixed prompts and `max_new_tokens=32`.
 - The benchmark measures full generation latency, not TTFT.
 - Prefill and decode timing are not separated.
-- Colab GPU hardware can vary between sessions.
-- The experiment does not model production traffic, scheduling, queueing, or streaming responses.
+- The experiment does not model streaming, request queues, multi-user concurrency, or service-level objectives.
+- Results may differ with vLLM, other kernels, other GPUs, longer outputs, or different model sizes.
 
 ## Future Work
 
-- Add time-to-first-token measurement.
-- Add INT8 and INT4 quantization experiments.
-- Add vLLM as an optimized serving backend.
+- Measure time to first token (TTFT).
+- Add vLLM backend comparisons.
+- Add concurrent request and sustained-load benchmarks.
 - Separate prefill and decode timing.
 - Evaluate longer output lengths and larger prompt sets.
-- Compare multiple GPU types.
-- Add concurrent request and sustained-load benchmarks.
+- Compare additional GPU types and serving configurations.
