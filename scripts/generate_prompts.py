@@ -1,0 +1,137 @@
+"""Generate a fixed prompt set for the MVP benchmark."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+
+PROMPTS = [
+    {
+        "id": "short-001",
+        "category": "short",
+        "prompt": "Summarize why GPUs are useful for neural network inference.",
+    },
+    {
+        "id": "short-002",
+        "category": "short",
+        "prompt": "Write a two-sentence explanation of batch size.",
+    },
+    {
+        "id": "short-003",
+        "category": "short",
+        "prompt": "List three common metrics for an inference benchmark.",
+    },
+    {
+        "id": "short-004",
+        "category": "short",
+        "prompt": "Explain the difference between latency and throughput.",
+    },
+    {
+        "id": "short-005",
+        "category": "short",
+        "prompt": "Give one practical tip for reducing LLM serving cost.",
+    },
+    {
+        "id": "medium-001",
+        "category": "medium",
+        "prompt": (
+            "You are reviewing an internal benchmark report. Explain how prompt "
+            "length, generated token count, and batch size can each affect measured "
+            "tokens per second."
+        ),
+    },
+    {
+        "id": "medium-002",
+        "category": "medium",
+        "prompt": (
+            "Draft a concise checklist for validating a new language model inference "
+            "pipeline before publishing results to a team dashboard."
+        ),
+    },
+    {
+        "id": "medium-003",
+        "category": "medium",
+        "prompt": (
+            "Compare CPU fallback and CUDA execution for a small transformer model. "
+            "Focus on reliability, expected speed, and memory behavior."
+        ),
+    },
+    {
+        "id": "medium-004",
+        "category": "medium",
+        "prompt": (
+            "Explain why warmup runs are useful in GPU benchmarks and what could go "
+            "wrong if they are skipped."
+        ),
+    },
+    {
+        "id": "medium-005",
+        "category": "medium",
+        "prompt": (
+            "Write a short project update describing progress on an FP16 baseline "
+            "for an LLM inference benchmark."
+        ),
+    },
+    {
+        "id": "long-001",
+        "category": "long",
+        "prompt": (
+            "Create a structured analysis of an LLM inference benchmark that uses "
+            "HuggingFace Transformers. Discuss model loading, prompt preparation, "
+            "batching, timing boundaries, GPU synchronization, memory measurement, "
+            "CSV output, and how the baseline could be extended later."
+        ),
+    },
+    {
+        "id": "long-002",
+        "category": "long",
+        "prompt": (
+            "You are designing a portfolio project for benchmarking local LLM "
+            "inference. Describe the minimum viable implementation, the risks of "
+            "overengineering early, and a practical roadmap that adds quantization "
+            "and serving engines after the baseline is trustworthy."
+        ),
+    },
+    {
+        "id": "long-003",
+        "category": "long",
+        "prompt": (
+            "Write a technical note explaining how generated tokens per second should "
+            "be interpreted. Include caveats about different prompt lengths, batch "
+            "sizes, hardware, model precision, tokenizer behavior, and deterministic "
+            "generation settings."
+        ),
+    },
+    {
+        "id": "long-004",
+        "category": "long",
+        "prompt": (
+            "Prepare an onboarding explanation for a teammate who will run an FP16 "
+            "LLM benchmark for the first time. Cover environment setup, HuggingFace "
+            "authentication, CUDA availability, expected outputs, and common failure "
+            "modes."
+        ),
+    },
+    {
+        "id": "long-005",
+        "category": "long",
+        "prompt": (
+            "Analyze the tradeoffs between measuring per-prompt latency and per-batch "
+            "latency in a simple benchmark. Explain how each view can be useful, what "
+            "the CSV rows should represent, and how future time-to-first-token metrics "
+            "could improve the report."
+        ),
+    },
+]
+
+
+def main() -> None:
+    output_path = Path("data/prompts.json")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(PROMPTS, indent=2) + "\n", encoding="utf-8")
+    print(f"Wrote {len(PROMPTS)} prompts to {output_path}")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,6 @@
+torch>=2.4
+transformers>=4.45
+pandas>=2.0
+tqdm>=4.66
+matplotlib>=3.8
+accelerate>=0.34
