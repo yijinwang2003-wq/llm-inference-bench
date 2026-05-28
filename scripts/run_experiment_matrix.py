@@ -1,4 +1,4 @@
-"""Run the FP16 batch-scaling benchmark matrix."""
+"""Run a single-precision batch-scaling benchmark matrix."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from scripts.generate_prompts import main as generate_prompts
 from src.benchmark import run_benchmark
 from src.config import MODEL_NAME
 from src.metrics import summarize_results
-from src.model_loader import load_model_fp16
+from src.model_loader import SUPPORTED_PRECISIONS, load_model
 from src.results import save_rows_to_csv
 
 
@@ -33,7 +33,7 @@ DRY_RUN_MAX_NEW_TOKENS = 8
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run the FP16 batch-scaling experiment matrix."
+        description="Run a single-precision batch-scaling experiment matrix."
     )
     parser.add_argument(
         "--dry-run",
@@ -49,6 +49,12 @@ def parse_args() -> argparse.Namespace:
             "Override the model. Defaults to Llama for the full experiment and "
             "TinyLlama for --dry-run."
         ),
+    )
+    parser.add_argument(
+        "--precision",
+        choices=SUPPORTED_PRECISIONS,
+        default="fp16",
+        help="Model precision to benchmark.",
     )
     return parser.parse_args()
 
@@ -67,8 +73,8 @@ def load_prompts(path: Path) -> list[str]:
     return prompts
 
 
-def output_path_for_batch(batch_size: int, dry_run: bool) -> Path:
-    prefix = "dry_run_fp16" if dry_run else "fp16"
+def output_path_for_batch(batch_size: int, precision: str, dry_run: bool) -> Path:
+    prefix = f"dry_run_{precision}" if dry_run else precision
     return Path("outputs") / f"{prefix}_batch{batch_size}.csv"
 
 
@@ -77,7 +83,16 @@ def is_oom_error(error: Exception) -> bool:
     return "out of memory" in message or "cuda error: out of memory" in message
 
 
-def print_summary(batch_size: int, rows: list[dict], output_path: Path) -> None:
+def add_precision(rows: list[dict], precision: str) -> list[dict]:
+    return [{**row, "precision": precision} for row in rows]
+
+
+def print_summary(
+    precision: str,
+    batch_size: int,
+    rows: list[dict],
+    output_path: Path,
+) -> None:
     summary = summarize_results(rows)
     max_memory_allocated = max(
         (float(row.get("gpu_memory_allocated_gb", 0.0)) for row in rows),
@@ -88,7 +103,7 @@ def print_summary(batch_size: int, rows: list[dict], output_path: Path) -> None:
         default=0.0,
     )
 
-    print(f"\nFinished batch size {batch_size}", flush=True)
+    print(f"\nFinished {precision} batch size {batch_size}", flush=True)
     print(f"  rows: {len(rows)}", flush=True)
     print(f"  output: {output_path}", flush=True)
     print(
@@ -124,9 +139,9 @@ def main() -> int:
         warmup_runs = FULL_WARMUP_RUNS
         max_new_tokens = FULL_MAX_NEW_TOKENS
 
-    print("FP16 batch-scaling experiment", flush=True)
+    print("Batch-scaling experiment", flush=True)
     print(f"  model: {model_name}", flush=True)
-    print("  precision: fp16", flush=True)
+    print(f"  precision: {args.precision}", flush=True)
     print(f"  batch sizes: {BATCH_SIZES}", flush=True)
     print(f"  prompts: {len(prompts)}", flush=True)
     print(f"  num_runs: {num_runs}", flush=True)
@@ -136,14 +151,18 @@ def main() -> int:
         print("  mode: dry run", flush=True)
 
     print("\nLoading model once for all batch sizes...", flush=True)
-    model, tokenizer, device = load_model_fp16(model_name)
+    model, tokenizer, device = load_model(model_name, precision=args.precision)
     print(f"Loaded model on device: {device}", flush=True)
 
     completed = []
     failed = []
     for batch_size in BATCH_SIZES:
-        output_path = output_path_for_batch(batch_size, dry_run=args.dry_run)
-        print(f"\nRunning batch size {batch_size}...", flush=True)
+        output_path = output_path_for_batch(
+            batch_size,
+            precision=args.precision,
+            dry_run=args.dry_run,
+        )
+        print(f"\nRunning {args.precision} batch size {batch_size}...", flush=True)
         try:
             rows = run_benchmark(
                 model=model,
@@ -154,8 +173,9 @@ def main() -> int:
                 warmup_runs=warmup_runs,
                 num_runs=num_runs,
             )
+            rows = add_precision(rows, args.precision)
             save_rows_to_csv(rows, output_path)
-            print_summary(batch_size, rows, output_path)
+            print_summary(args.precision, batch_size, rows, output_path)
             completed.append(batch_size)
         except RuntimeError as exc:
             if is_oom_error(exc):

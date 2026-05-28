@@ -1,8 +1,11 @@
-"""Model loading utilities for the FP16 Transformers baseline."""
+"""Model loading utilities for Transformers inference baselines."""
 
 from __future__ import annotations
 
 from importlib.metadata import version
+
+
+SUPPORTED_PRECISIONS = ("fp16", "int8", "int4")
 
 
 def _torch_version_tuple() -> tuple[int, ...]:
@@ -45,12 +48,16 @@ def _is_network_error(error: Exception) -> bool:
     return any(marker in message for marker in network_markers)
 
 
-def load_model_fp16(model_name: str):
-    """Load a causal language model for the FP16 baseline.
+def load_model(model_name: str, precision: str = "fp16"):
+    """Load a causal language model for the requested precision.
 
-    CUDA uses float16. CPU fallback uses float32 because CPU float16 generation is
-    poorly supported and often slower or numerically fragile.
+    FP16 uses CUDA float16 when available and CPU float32 fallback for smoke
+    tests. INT8 and INT4 use bitsandbytes and require CUDA.
     """
+
+    if precision not in SUPPORTED_PRECISIONS:
+        formatted = ", ".join(SUPPORTED_PRECISIONS)
+        raise ValueError(f"precision must be one of: {formatted}")
 
     if _torch_version_tuple() < (2, 4):
         raise RuntimeError(
@@ -60,14 +67,39 @@ def load_model_fp16(model_name: str):
         )
 
     import torch
-    from transformers import AutoModelForCausalLM, AutoTokenizer
+    from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
     cuda_available = torch.cuda.is_available()
     device = torch.device("cuda" if cuda_available else "cpu")
 
+    if precision in {"int8", "int4"} and not cuda_available:
+        raise RuntimeError(
+            f"{precision} quantization requires CUDA and bitsandbytes. "
+            "Run quantized benchmarks on a Colab GPU or another CUDA runtime."
+        )
+
     try:
         tokenizer = AutoTokenizer.from_pretrained(model_name)
-        if cuda_available:
+        if precision == "int8":
+            quantization_config = BitsAndBytesConfig(load_in_8bit=True)
+            model = AutoModelForCausalLM.from_pretrained(
+                model_name,
+                quantization_config=quantization_config,
+                device_map="auto",
+                low_cpu_mem_usage=True,
+            )
+        elif precision == "int4":
+            quantization_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_compute_dtype=torch.float16,
+            )
+            model = AutoModelForCausalLM.from_pretrained(
+                model_name,
+                quantization_config=quantization_config,
+                device_map="auto",
+                low_cpu_mem_usage=True,
+            )
+        elif cuda_available:
             model = AutoModelForCausalLM.from_pretrained(
                 model_name,
                 torch_dtype=torch.float16,
@@ -104,3 +136,9 @@ def load_model_fp16(model_name: str):
         model.to(device)
     model.eval()
     return model, tokenizer, device
+
+
+def load_model_fp16(model_name: str):
+    """Load a causal language model for the FP16 baseline."""
+
+    return load_model(model_name, precision="fp16")
