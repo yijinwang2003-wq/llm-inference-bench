@@ -2,7 +2,7 @@
 
 `llm-inference-bench` is an ML systems benchmark project for studying LLM inference performance across precision modes and batch sizes. The current experiment evaluates `meta-llama/Llama-3.2-3B-Instruct` with HuggingFace Transformers on a Colab CUDA GPU using FP16, INT8, and INT4.
 
-The main goal is to measure the practical tradeoffs between throughput, latency, and allocated GPU memory before moving to production-oriented serving features such as TTFT, vLLM, concurrency, and prefill/decode breakdowns.
+The main goal is to measure the practical tradeoffs between throughput, latency, and allocated GPU memory before adding production-oriented serving features such as TTFT and concurrency.
 
 ## Motivation
 
@@ -142,7 +142,7 @@ This writes:
 
 Run the same plotting command after either experiment:
 
-```bash
+```bash id="4x9xpw"
 python scripts/plot_results.py
 ```
 
