@@ -46,6 +46,7 @@ llm-inference-bench/
 |   |-- generate_prompts.py
 |   |-- run_experiment_matrix.py
 |   |-- run_quantization_matrix.py
+|   |-- run_vllm_matrix.py
 |   |-- plot_results.py
 |   `-- run_benchmark.py
 |-- src/
@@ -53,6 +54,7 @@ llm-inference-bench/
 |   |-- config.py
 |   |-- metrics.py
 |   |-- model_loader.py
+|   |-- vllm_benchmark.py
 |   `-- results.py
 |-- README.md
 |-- WRITEUP.md
@@ -110,6 +112,28 @@ Expected raw CSV outputs include:
 - `outputs/int8_batch1.csv`, `outputs/int8_batch8.csv`, `outputs/int8_batch32.csv`
 - `outputs/int4_batch1.csv`, `outputs/int4_batch8.csv`, `outputs/int4_batch32.csv`
 
+## vLLM Backend Benchmark
+
+Phase 2 adds a separate vLLM FP16 path for backend comparison against the HuggingFace Transformers FP16 baseline. vLLM is designed for serving-oriented inference and uses techniques such as PagedAttention and continuous batching to improve memory management and request scheduling.
+
+Run the vLLM dry run on a CUDA runtime:
+
+```bash
+python scripts/run_vllm_matrix.py --dry-run
+```
+
+Run the full vLLM FP16 matrix on Colab GPU:
+
+```bash
+python scripts/run_vllm_matrix.py
+```
+
+This writes:
+
+- `outputs/vllm_fp16_batch1.csv`
+- `outputs/vllm_fp16_batch8.csv`
+- `outputs/vllm_fp16_batch32.csv`
+
 ## Generate Plots
 
 After the precision matrix CSVs exist, generate aggregate metrics and plots:
@@ -124,6 +148,13 @@ This writes:
 - `outputs/precision_throughput_vs_batch.png`
 - `outputs/precision_latency_vs_batch.png`
 - `outputs/precision_memory_vs_batch.png`
+
+When both Transformers FP16 and vLLM FP16 CSVs are present, the same plotting command also writes backend comparison outputs:
+
+- `outputs/backend_aggregated_metrics.csv`
+- `outputs/backend_throughput_vs_batch.png`
+- `outputs/backend_latency_vs_batch.png`
+- `outputs/backend_memory_vs_batch.png`
 
 ## Results
 

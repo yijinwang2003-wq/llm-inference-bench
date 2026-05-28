@@ -5,3 +5,4 @@ tqdm>=4.66
 matplotlib>=3.8
 accelerate>=0.34
 bitsandbytes
+vllm
