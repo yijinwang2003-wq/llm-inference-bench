@@ -148,6 +148,25 @@ The memory results show the expected advantage of quantization. At batch size 32
 
 Backend implementation matters. Quantization changes the memory footprint and arithmetic path, but speed depends on kernel support, dequantization overhead, model architecture, batch size, and the serving stack. These results should not be read as a claim that quantization universally reduces throughput, or that FP16 is always faster in every backend. They show what happened in this specific HuggingFace Transformers plus bitsandbytes baseline.
 
+#### Roofline Analysis
+
+LLM decode-phase inference at batch size 1 is memory-bandwidth-bound: each generated token requires loading all model weights from GPU HBM once. This gives a theoretical throughput ceiling:
+
+```text
+roofline = memory_bandwidth / bytes_per_token
+bytes_per_token = num_params * bytes_per_param
+```
+
+For Llama-3.2-3B with 3.21B parameters on a T4 with 300 GB/s memory bandwidth:
+
+| Precision | Bytes/param | Model size | Roofline | Measured (batch=1) | HBM utilization |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| FP16 | 2.0 | 6.42 GB | 46.7 tok/s | 27.4 tok/s | 58.7% |
+| INT8 | 1.0 | 3.21 GB | 93.5 tok/s | 7.6 tok/s | 8.1% |
+| INT4 | 0.5 | 1.60 GB | 187.0 tok/s | 15.7 tok/s | 8.4% |
+
+FP16 reaches about 59% of its roofline, indicating that the kernel is reasonably efficient. INT8 and INT4 reach only about 8%, which explains why quantization reduced memory footprint without improving throughput. In this setup, bitsandbytes performs runtime dequantization from INT8 or INT4 to FP16 before each matrix multiplication, adding overhead that dominates the memory bandwidth savings. The roofline ceiling rises with quantization, but this implementation does not reach it.
+
 ### Backend Tradeoffs
 
 The backend comparison shows that vLLM FP16 scales better at larger batch sizes. HuggingFace FP16 is faster at batch size 1, with 27.3510 tok/s versus 21.3900 tok/s for vLLM. At batch size 8, vLLM slightly leads at 198.9600 tok/s versus 184.9648 tok/s. At batch size 32, the gap is larger: vLLM reaches 521.1701 tok/s while HuggingFace reaches 434.4513 tok/s.
