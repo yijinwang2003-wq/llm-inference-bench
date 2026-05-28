@@ -52,6 +52,16 @@ def parse_args() -> argparse.Namespace:
         help="Number of timed benchmark passes over the prompt set.",
     )
     parser.add_argument(
+        "--model",
+        default=MODEL_NAME,
+        help="HuggingFace model ID to benchmark.",
+    )
+    parser.add_argument(
+        "--limit-prompts",
+        type=int,
+        help="Use only the first N prompts from the prompt file.",
+    )
+    parser.add_argument(
         "--output",
         default="outputs/benchmark_results.csv",
         help="CSV output path.",
@@ -98,14 +108,18 @@ def main() -> int:
 
     try:
         prompts = load_prompts(prompt_path)
+        if args.limit_prompts is not None:
+            if args.limit_prompts < 1:
+                raise ValueError("--limit-prompts must be positive")
+            prompts = prompts[: args.limit_prompts]
         validate_environment()
 
         from src.benchmark import run_benchmark
         from src.model_loader import load_model_fp16
 
         print(f"Loaded {len(prompts)} prompts from {prompt_path}", flush=True)
-        print(f"Loading model: {MODEL_NAME}", flush=True)
-        model, tokenizer, device = load_model_fp16(MODEL_NAME)
+        print(f"Loading model: {args.model}", flush=True)
+        model, tokenizer, device = load_model_fp16(args.model)
         print(f"Running benchmark on device: {device}", flush=True)
 
         rows = run_benchmark(

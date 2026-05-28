@@ -43,7 +43,48 @@ python scripts/run_benchmark.py --batch-size 8 --num-runs 3 --warmup-runs 2
 python scripts/run_benchmark.py --batch-size 32 --num-runs 3 --warmup-runs 2
 ```
 
+Override the model:
+
+```bash
+python scripts/run_benchmark.py --model TinyLlama/TinyLlama-1.1B-Chat-v1.0
+python scripts/run_benchmark.py --model meta-llama/Llama-3.2-3B-Instruct
+```
+
 Supported batch sizes are `1`, `8`, and `32`. CUDA is used automatically when available; otherwise the script falls back to CPU with float32.
+
+Fastest local CPU smoke test:
+
+```bash
+python scripts/run_benchmark.py \
+  --model TinyLlama/TinyLlama-1.1B-Chat-v1.0 \
+  --batch-size 1 \
+  --num-runs 1 \
+  --warmup-runs 0 \
+  --max-new-tokens 8 \
+  --limit-prompts 1
+```
+
+Safer Colab smoke test:
+
+```bash
+python scripts/run_benchmark.py \
+  --model TinyLlama/TinyLlama-1.1B-Chat-v1.0 \
+  --batch-size 1 \
+  --num-runs 1 \
+  --warmup-runs 0 \
+  --max-new-tokens 8
+```
+
+Colab GPU Llama smoke test:
+
+```bash
+python scripts/run_benchmark.py \
+  --model meta-llama/Llama-3.2-3B-Instruct \
+  --batch-size 1 \
+  --num-runs 1 \
+  --warmup-runs 0 \
+  --max-new-tokens 8
+```
 
 ## Output CSV
 

@@ -62,16 +62,24 @@ def load_model_fp16(model_name: str):
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    dtype = torch.float16 if device.type == "cuda" else torch.float32
+    cuda_available = torch.cuda.is_available()
+    device = torch.device("cuda" if cuda_available else "cpu")
 
     try:
         tokenizer = AutoTokenizer.from_pretrained(model_name)
-        model = AutoModelForCausalLM.from_pretrained(
-            model_name,
-            torch_dtype=dtype,
-            low_cpu_mem_usage=True,
-        )
+        if cuda_available:
+            model = AutoModelForCausalLM.from_pretrained(
+                model_name,
+                torch_dtype=torch.float16,
+                device_map="auto",
+                low_cpu_mem_usage=True,
+            )
+        else:
+            model = AutoModelForCausalLM.from_pretrained(
+                model_name,
+                torch_dtype=torch.float32,
+                low_cpu_mem_usage=True,
+            )
     except Exception as exc:
         if _is_auth_or_access_error(exc):
             raise RuntimeError(
@@ -92,6 +100,7 @@ def load_model_fp16(model_name: str):
         tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
 
-    model.to(device)
+    if not cuda_available:
+        model.to(device)
     model.eval()
     return model, tokenizer, device
